@@ -11,24 +11,28 @@ import android.view.MenuItem
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import com.furkan.pekautomotiveapp.databinding.ActivityMainBinding
+import com.furkan.pekautomotiveapp.network.NetworkManager
+import com.furkan.pekautomotiveapp.util.Constants
+import com.furkan.pekautomotiveapp.viewmodel.MainViewModel
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.*
 import java.io.BufferedWriter
 import java.io.IOException
 import java.io.OutputStreamWriter
-import java.net.*
+import java.net.InetAddress
+import java.net.Socket
+import java.net.UnknownHostException
 
 class MainActivity : AppCompatActivity() {
-    companion object {
-        private const val CONNECTION_TIMEOUT = 20_000L
-        private const val PORT = 8001
-        private const val SOCKET_TIMEOUT = 3_000L
-    }
+
+    private val viewModel: MainViewModel by viewModels()
+    private lateinit var networkManager: NetworkManager
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var etInput: EditText
@@ -40,11 +44,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var toolbar: Toolbar
     private lateinit var ipList: HashSet<String>
     private lateinit var refusedList: MutableList<String>
-    private var isConnected = false
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        networkManager = NetworkManager(this, viewModel)
+
         btnSend = binding.btnSend
         etInput = binding.etInput
         cbManualIP = binding.cbManualIP
@@ -71,7 +77,7 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             lifecycleScope.launch { sendToServer(input, ipList, refusedList) }
-            if (!isConnected && !cbManualIP.isChecked) {
+            if (viewModel.isConnected.value!! && !cbManualIP.isChecked) {
                 Snackbar.make(
                     binding.root,
                     getString(R.string.error_no_connection),
@@ -95,44 +101,6 @@ class MainActivity : AppCompatActivity() {
             }
             else -> super.onOptionsItemSelected(item)
         }
-    }
-
-    private suspend fun attemptConnection(ip: String): Boolean {
-        val result: Boolean
-        withContext(Dispatchers.IO) {
-            result = try {
-                Log.d("Network", "attemptConnection: Attempting connection for IP $ip")
-                val socket = Socket()
-                socket.connect(InetSocketAddress(ip, PORT), SOCKET_TIMEOUT.toInt())
-                Log.d("Network", "attemptConnection: Socket created for IP $ip") // Add this log
-                socket.close()
-                Log.d("Network", "attemptConnection: Connection for IP $ip is successful")
-                isConnected = true
-                true
-            } catch (e: ConnectException) {
-                if (e.toString().contains("Connection refused")) {
-                    Log.d("Network", "attemptConnection: CONNECTION REFUSED FOR IP : $ip")
-                }
-                isConnected = false
-                false
-            } catch (e: UnknownHostException) {
-                Log.d("Network", "attemptConnection: UnknownHost Exception for IP: $ip")
-                e.printStackTrace()
-                isConnected = false
-                false
-            } catch (e: IOException) {
-                Log.d("Network", "attemptConnection: IO Exception for IP: $ip")
-                e.printStackTrace()
-                isConnected = false
-                false
-            } catch (e: SocketTimeoutException) {
-                Log.d("Network", "attemptConnection: Socket timeout for IP: $ip")
-                e.printStackTrace()
-                isConnected = false
-                false
-            }
-        }
-        return result
     }
 
     private fun showResetConfirmationDialog() {
@@ -169,11 +137,11 @@ class MainActivity : AppCompatActivity() {
         val maxRetries = 3
         var currentRetry = 0
         try {
-            withTimeout(CONNECTION_TIMEOUT) {
+            withTimeout(Constants.CONNECTION_TIMEOUT) {
                 while (currentRetry < maxRetries) {
                     Log.d("Network", "connectToServer: Inside while loop")
                     Log.d("Network", "Connection retry : ${currentRetry + 1}")
-                    isConnected = false
+                    viewModel.isConnected.postValue(false)
                     if (cbManualIP.isChecked && etManualIP.text.toString().isNotEmpty()) {
                         Log.d("Network", "connectToServer: Manual IP checked")
                         val manualIp = etManualIP.text.toString()
@@ -181,7 +149,7 @@ class MainActivity : AppCompatActivity() {
                             Log.d("Network", "connectToServer: Manual IP connection successful")
                             ipList.clear()
                             ipList.add(manualIp)
-                            isConnected = true
+                            viewModel.isConnected.postValue(true)
                             break
                         }
                     } else {
@@ -200,7 +168,7 @@ class MainActivity : AppCompatActivity() {
                                 Log.d("Network", "connectToServer: Testing connection for IP $ip")
                                 if (testConnection(this@MainActivity, ip)) {
                                     Log.d("Network", "connectToServer: IP connection successful")
-                                    isConnected = true
+                                    viewModel.isConnected.postValue(true)
                                     ipList.clear()
                                     refusedList.clear()
                                     ipList.add(ip)
@@ -210,7 +178,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    if (isConnected) {
+                    if (viewModel.isConnected.value!!) {
                         Log.d("Network", "connectToServer: isConnected is true")
                         break
                     } else {
@@ -227,7 +195,7 @@ class MainActivity : AppCompatActivity() {
         } finally {
             withContext(Dispatchers.Main) {
                 progressDialog.dismiss()
-                if (isConnected) {
+                if (viewModel.isConnected.value!!) {
                     Snackbar.make(
                         binding.root,
                         getString(R.string.info_connection_successful),
@@ -263,8 +231,8 @@ class MainActivity : AppCompatActivity() {
         }
         var result = false
         try {
-            withTimeout(SOCKET_TIMEOUT) {
-                result = attemptConnection(ip)
+            withTimeout(Constants.SOCKET_TIMEOUT) {
+                result = networkManager.attemptConnection(ip)
                 Log.d(
                     "Network",
                     "testConnection: Connection attempt finished for IP $ip, result: $result"
@@ -292,7 +260,7 @@ class MainActivity : AppCompatActivity() {
                     showTestConnectionProgressDialog(this@MainActivity, manualIp)
                 }
                 Log.d("Network", "sendToServer: Sending ip to attemptConnection for IP $manualIp")
-                if (attemptConnection(manualIp)) {
+                if (networkManager.attemptConnection(manualIp)) {
                     withContext(Dispatchers.Main) { progressDialog.dismiss() }
                     Log.d("Network", "sendToServer: Sending ip to sentToIp for IP $manualIp")
                     sendToIp(manualIp, text)
@@ -310,7 +278,7 @@ class MainActivity : AppCompatActivity() {
             }
             for (ip in ipList) {
                 if (!refusedList.contains(ip)) {
-                    if (attemptConnection(ip)) {
+                    if (networkManager.attemptConnection(ip)) {
                         sendToIp(ip, text)
                     } else {
                         Log.d("Network", "REFUSED FOR IP : $ip")
@@ -324,7 +292,7 @@ class MainActivity : AppCompatActivity() {
     private suspend fun sendToIp(ip: String, text: String) {
         withContext(Dispatchers.IO) {
             try {
-                val socket = Socket(ip, PORT)
+                val socket = Socket(ip, Constants.PORT)
                 val outputStream = socket.getOutputStream()
                 val outputStreamWriter = OutputStreamWriter(outputStream)
                 val bufferedWriter = BufferedWriter(outputStreamWriter)
