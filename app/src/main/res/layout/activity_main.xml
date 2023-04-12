@@ -49,7 +49,8 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:layout_marginTop="16dp"
-                android:text="Send" />
+                android:backgroundTint="@color/green"
+                android:text="Send Message" />
 
             <androidx.constraintlayout.utils.widget.MockView
                 android:id="@+id/mockView"
