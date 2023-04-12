@@ -1,3 +1,13 @@
 <resources>
-    <string name="app_name">PekAutomotiveApp</string>
+    <string name="app_name">Send Message to PC !</string>
+    <string name="error_no_connection">NO CONNECTION. Please make sure the server is running and try connecting again. To refresh the connection, click the button on the top right corner.</string>
+    <string name="error_enter_message">Please enter your message</string>
+    <string name="error_ip_not_valid">IP is not valid. Check if the server is running, retry to connect or enter another IP.</string>
+    <string name="error_send_message">Error While Trying to Send Message!</string>
+    <string name="dialog_reset_message">Are you sure you want to reset the connection?</string>
+    <string name="dialog_warning_message">Please make sure the server is running before clicking OK, otherwise the recorded IP will be reset and the app will try to connect again.</string>
+    <string name="dialog_first_time_message">First time running the app… Configuring initial setup for connection.</string>
+    <string name="dialog_failed_message">Failed to connect to the server. Please make sure the server is running and try again or enter a manual IP. To refresh the connection, click the button on the top right corner.</string>
+    <string name="info_connection_successful">Connection successful. You can send messages now.</string>
+    <string name="info_message_send_successful">Message Sent!</string>
 </resources>

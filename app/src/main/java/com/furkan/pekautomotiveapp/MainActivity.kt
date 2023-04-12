@@ -26,6 +26,8 @@ import java.net.*
 class MainActivity : AppCompatActivity() {
     companion object {
         private const val CONNECTION_TIMEOUT = 20_000L
+        private const val PORT = 8001
+        private const val SOCKET_TIMEOUT = 3_000L
     }
 
     private lateinit var binding: ActivityMainBinding
@@ -61,17 +63,18 @@ class MainActivity : AppCompatActivity() {
         btnSend.setOnClickListener {
             val input = etInput.text.toString()
             if (input.isEmpty()) {
-                Snackbar.make(binding.root, "Please enter your message", Snackbar.LENGTH_SHORT)
-                    .show()
+                Snackbar.make(
+                    binding.root,
+                    getString(R.string.error_enter_message),
+                    Snackbar.LENGTH_SHORT
+                ).show()
                 return@setOnClickListener
             }
             lifecycleScope.launch { sendToServer(input, ipList, refusedList) }
             if (!isConnected && !cbManualIP.isChecked) {
                 Snackbar.make(
                     binding.root,
-                    "NO CONNECTION. " +
-                            "Please make sure the server is running and try connecting again. " +
-                            "To refresh the connection, click the button on the top right corner.",
+                    getString(R.string.error_no_connection),
                     Snackbar.LENGTH_LONG
                 ).show()
                 return@setOnClickListener
@@ -96,12 +99,11 @@ class MainActivity : AppCompatActivity() {
 
     private suspend fun attemptConnection(ip: String): Boolean {
         val result: Boolean
-        val socketTimeout = 3000
         withContext(Dispatchers.IO) {
             result = try {
                 Log.d("Network", "attemptConnection: Attempting connection for IP $ip")
                 val socket = Socket()
-                socket.connect(InetSocketAddress(ip, 8000), socketTimeout)
+                socket.connect(InetSocketAddress(ip, PORT), SOCKET_TIMEOUT.toInt())
                 Log.d("Network", "attemptConnection: Socket created for IP $ip") // Add this log
                 socket.close()
                 Log.d("Network", "attemptConnection: Connection for IP $ip is successful")
@@ -135,11 +137,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showResetConfirmationDialog() {
         AlertDialog.Builder(this)
-            .setTitle("Reset Connection")
-            .setMessage("Are you sure you want to reset the connection?")
+            .setTitle("Reset Connection").setMessage(getString(R.string.dialog_reset_message))
             .setPositiveButton("Yes") { _, _ -> resetConnection() }
-            .setNegativeButton("No", null)
-            .show()
+            .setNegativeButton("No", null).show()
     }
 
     private fun resetConnection() {
@@ -149,14 +149,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showConnectionDialog(isFirstRun: Boolean) {
-        AlertDialog.Builder(this)
-            .setTitle("Connection Warning")
-            .setMessage("Please make sure the server is running before clicking OK, otherwise the recorded IP will be reset and the app will try to connect again.")
+        AlertDialog.Builder(this).setTitle("Connection Warning")
+            .setMessage(getString(R.string.dialog_warning_message))
             .setPositiveButton("OK") { _, _ ->
                 progressDialog = ProgressDialog(this).apply {
                     setTitle("Establishing Connection")
                     setMessage(
-                        if (isFirstRun) "First time running the app... Configuring initial setup for connection."
+                        if (isFirstRun) getString(R.string.dialog_first_time_message)
                         else "Please wait..."
                     )
                     setCancelable(false)
@@ -231,17 +230,13 @@ class MainActivity : AppCompatActivity() {
                 if (isConnected) {
                     Snackbar.make(
                         binding.root,
-                        "Connection successful. You can send messages now.",
+                        getString(R.string.info_connection_successful),
                         Snackbar.LENGTH_LONG
                     ).show()
                 } else {
                     AlertDialog.Builder(this@MainActivity)
                         .setTitle("Connection Failed")
-                        .setMessage(
-                            "Failed to connect to the server. " +
-                                    "Please make sure the server is running and try again or enter a manual IP. " +
-                                    "To refresh the connection, click the button on the top right corner."
-                        )
+                        .setMessage(getString(R.string.dialog_failed_message))
                         .setPositiveButton("OK", null).setCancelable(false).show()
                 }
             }
@@ -266,10 +261,9 @@ class MainActivity : AppCompatActivity() {
                 null
             }
         }
-        val testTimeout = 3000L // 3 seconds
         var result = false
         try {
-            withTimeout(testTimeout) {
+            withTimeout(SOCKET_TIMEOUT) {
                 result = attemptConnection(ip)
                 Log.d(
                     "Network",
@@ -307,7 +301,7 @@ class MainActivity : AppCompatActivity() {
                         progressDialog.dismiss()
                         Snackbar.make(
                             binding.root,
-                            "IP is not valid. Check if the server is running, retry to connect or enter another IP.",
+                            getString(R.string.error_ip_not_valid),
                             Snackbar.LENGTH_LONG
                         ).show()
                     }
@@ -330,7 +324,7 @@ class MainActivity : AppCompatActivity() {
     private suspend fun sendToIp(ip: String, text: String) {
         withContext(Dispatchers.IO) {
             try {
-                val socket = Socket(ip, 8000)
+                val socket = Socket(ip, PORT)
                 val outputStream = socket.getOutputStream()
                 val outputStreamWriter = OutputStreamWriter(outputStream)
                 val bufferedWriter = BufferedWriter(outputStreamWriter)
@@ -341,7 +335,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     Snackbar.make(
                         binding.root,
-                        "Message Sent!",
+                        getString(R.string.info_message_send_successful),
                         Snackbar.LENGTH_LONG
                     ).show()
                 }
@@ -351,7 +345,7 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     Snackbar.make(
                         binding.root,
-                        "Error While Trying to Send Message!",
+                        getString(R.string.error_send_message),
                         Snackbar.LENGTH_LONG
                     ).show()
                 }
