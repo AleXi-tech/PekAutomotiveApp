@@ -1,11 +1,16 @@
 package com.furkan.pekautomotiveapp.network
 
+import android.app.ProgressDialog
 import android.content.Context
 import android.util.Log
+import android.widget.CheckBox
+import android.widget.EditText
 import com.furkan.pekautomotiveapp.util.Constants
 import com.furkan.pekautomotiveapp.viewmodel.MainViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.IOException
 import java.net.*
 
@@ -46,6 +51,33 @@ class NetworkManager(private val context: Context, private val viewModel: MainVi
                 false
             }
         }
+        return result
+    }
+
+    suspend fun testConnection(
+        ip: String,
+        manualIpBoolean: Boolean,
+        showTestConnectionProgressDialog : ProgressDialog,
+        networkManager: NetworkManager
+    ): Boolean {
+        Log.d("Network", "testConnection: Starting test for IP $ip")
+        val progressDialog = withContext(Dispatchers.Main) { showTestConnectionProgressDialog }
+        var result = false
+        try {
+            withTimeout(Constants.SOCKET_TIMEOUT) {
+                result = networkManager.attemptConnection(ip)
+                Log.d(
+                    "Network",
+                    "testConnection: Connection attempt finished for IP $ip, result: $result"
+                )
+            }
+        } catch (e: TimeoutCancellationException) {
+            Log.d("Network", "testConnection: Test connection timed out for IP: $ip")
+        }
+//        if (progressDialog != null) {
+//            withContext(Dispatchers.Main) { progressDialog.dismiss() }
+//        }
+        Log.d("Network", "testConnection: Finished test for IP $ip, final result: $result")
         return result
     }
 }

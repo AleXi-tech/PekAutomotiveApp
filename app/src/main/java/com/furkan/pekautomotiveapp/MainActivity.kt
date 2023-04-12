@@ -42,8 +42,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etManualIP: EditText
     private lateinit var progressDialog: ProgressDialog
     private lateinit var toolbar: Toolbar
-    private lateinit var ipList: HashSet<String>
-    private lateinit var refusedList: MutableList<String>
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -57,8 +55,7 @@ class MainActivity : AppCompatActivity() {
         etManualIP = binding.etManualIP
         toolbar = binding.toolbar
         setSupportActionBar(toolbar)
-        ipList = HashSet()
-        refusedList = mutableListOf()
+
         sharedPreferences = getSharedPreferences("app_preferences", Context.MODE_PRIVATE)
         val isFirstRun = sharedPreferences.getBoolean("is_first_run", true)
         if (isFirstRun) {
@@ -76,7 +73,13 @@ class MainActivity : AppCompatActivity() {
                 ).show()
                 return@setOnClickListener
             }
-            lifecycleScope.launch { sendToServer(input, ipList, refusedList) }
+            lifecycleScope.launch {
+                sendToServer(
+                    input,
+                    viewModel.ipList.value!!,
+                    viewModel.refusedList.value!!
+                )
+            }
             if (viewModel.isConnected.value!! && !cbManualIP.isChecked) {
                 Snackbar.make(
                     binding.root,
@@ -145,33 +148,44 @@ class MainActivity : AppCompatActivity() {
                     if (cbManualIP.isChecked && etManualIP.text.toString().isNotEmpty()) {
                         Log.d("Network", "connectToServer: Manual IP checked")
                         val manualIp = etManualIP.text.toString()
-                        if (testConnection(this@MainActivity, manualIp)) {
+                        if (networkManager.testConnection(
+                                manualIp,
+                                true,
+                                showTestConnectionProgressDialog(this@MainActivity, manualIp, true),
+                                networkManager
+                            )
+                        ) {
                             Log.d("Network", "connectToServer: Manual IP connection successful")
-                            ipList.clear()
-                            ipList.add(manualIp)
+                            viewModel.ipList.value!!.clear()
+                            viewModel.ipList.value!!.add(manualIp)
                             viewModel.isConnected.postValue(true)
                             break
                         }
                     } else {
                         Log.d("Network", "connectToServer: Manual IP connection unsuccessful")
-                        ipList = getLocalIpAddress()
+                        viewModel.ipList.value = getLocalIpAddress()
                         Log.d("Network", "connectToServer: Obtained IP list")
                         Log.d(
                             "Network",
-                            "IP RETRIEVAL PROCESS FINISHED, AVAILABLE IP ADDRESSES : $ipList"
+                            "IP RETRIEVAL PROCESS FINISHED, AVAILABLE IP ADDRESSES : ${viewModel.ipList.value!!}"
                         )
-                        if (ipList.isNotEmpty()) {
-                            val iterator = ipList.iterator()
+                        if (viewModel.ipList.value!!.isNotEmpty()) {
+                            val iterator = viewModel.ipList.value!!.iterator()
                             while (iterator.hasNext()) {
                                 Log.d("Network", "connectToServer: Inside iterator loop")
                                 val ip = iterator.next()
                                 Log.d("Network", "connectToServer: Testing connection for IP $ip")
-                                if (testConnection(this@MainActivity, ip)) {
+                                if (networkManager.testConnection(
+                                        ip,
+                                        false,
+                                        showTestConnectionProgressDialog(this@MainActivity, ip,false),
+                                        networkManager
+                                    )) {
                                     Log.d("Network", "connectToServer: IP connection successful")
                                     viewModel.isConnected.postValue(true)
-                                    ipList.clear()
-                                    refusedList.clear()
-                                    ipList.add(ip)
+                                    viewModel.ipList.value?.clear()
+                                    viewModel.refusedList.value?.clear()
+                                    viewModel.ipList.value!!.add(ip)
                                     break
                                 }
                                 Log.d("Network", "connectToServer: IP connection unsuccessful")
@@ -211,41 +225,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showTestConnectionProgressDialog(context: Context, ip: String): ProgressDialog {
+    private fun showTestConnectionProgressDialog(context: Context, ip: String, isManualIp: Boolean): ProgressDialog {
         return ProgressDialog(context).apply {
             setTitle("Testing Connection")
             setMessage("Testing connection for IP: $ip")
             setCancelable(false)
-            show()
+            if (isManualIp) show()
+            else dismiss()
         }
-    }
-
-    private suspend fun testConnection(context: Context, ip: String): Boolean {
-        Log.d("Network", "testConnection: Starting test for IP $ip")
-        val progressDialog = withContext(Dispatchers.Main) {
-            if (cbManualIP.isChecked && etManualIP.text.toString().isNotEmpty()) {
-                showTestConnectionProgressDialog(context, etManualIP.text.toString())
-            } else {
-                null
-            }
-        }
-        var result = false
-        try {
-            withTimeout(Constants.SOCKET_TIMEOUT) {
-                result = networkManager.attemptConnection(ip)
-                Log.d(
-                    "Network",
-                    "testConnection: Connection attempt finished for IP $ip, result: $result"
-                )
-            }
-        } catch (e: TimeoutCancellationException) {
-            Log.d("Network", "testConnection: Test connection timed out for IP: $ip")
-        }
-        if (progressDialog != null) {
-            withContext(Dispatchers.Main) { progressDialog.dismiss() }
-        }
-        Log.d("Network", "testConnection: Finished test for IP $ip, final result: $result")
-        return result
     }
 
     private suspend fun sendToServer(
@@ -257,7 +244,7 @@ class MainActivity : AppCompatActivity() {
             val manualIp = etManualIP.text.toString()
             if (cbManualIP.isChecked && manualIp.isNotEmpty()) {
                 val progressDialog = withContext(Dispatchers.Main) {
-                    showTestConnectionProgressDialog(this@MainActivity, manualIp)
+                    showTestConnectionProgressDialog(this@MainActivity, manualIp, true)
                 }
                 Log.d("Network", "sendToServer: Sending ip to attemptConnection for IP $manualIp")
                 if (networkManager.attemptConnection(manualIp)) {
