@@ -5,8 +5,6 @@ import android.content.Context
 import android.net.wifi.WifiManager
 import android.util.Log
 import android.view.View
-import android.widget.CheckBox
-import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
 import com.furkan.pekautomotiveapp.R
 import com.furkan.pekautomotiveapp.util.Commons
@@ -14,9 +12,7 @@ import com.furkan.pekautomotiveapp.util.Constants
 import com.furkan.pekautomotiveapp.viewmodel.MainViewModel
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.*
-import java.io.BufferedWriter
-import java.io.IOException
-import java.io.OutputStreamWriter
+import java.io.*
 import java.net.*
 
 class NetworkManager(
@@ -98,12 +94,16 @@ class NetworkManager(
                     jobs.add(async {
                         ip[3] = i.toByte()
                         val address: InetAddress = InetAddress.getByAddress(ip)
-                        if (address.isReachable(500)) {
-                            Log.d("Network", "$address machine is turned on and can be pinged")
-                            synchronized(ipList) { ipList.add(address.toString().drop(1)) }
-                        } else if (!address.hostAddress?.equals(address.hostName)!!) {
-                            Log.d("Network", "$address machine is known in a DNS lookup")
-                        } else {
+                        val ipAddress = address.toString().substring(1)
+                        val isDeviceOnline =
+                            isHostOnline(ipAddress, Constants.PORT, 1000) || isHostInArpCache(ipAddress)
+                        if (isDeviceOnline) {
+                            Log.d("Network", "$ipAddress machine is turned on and can be pinged")
+                            synchronized(ipList) { ipList.add(ipAddress) }
+                        } else if (address.hostAddress != address.hostName) {
+                            Log.d("Network", "$ipAddress machine is known in a DNS lookup")
+                        }
+                        else {
                         }
                     })
                 }
@@ -115,6 +115,34 @@ class NetworkManager(
             }
         }
         return ipList
+    }
+
+    private fun isHostInArpCache(ipAddress: String?): Boolean {
+        try {
+            val process = Runtime.getRuntime().exec("arp -a")
+            val bufferedReader = BufferedReader(InputStreamReader(process.inputStream))
+            var line: String
+            while (bufferedReader.readLine().also { line = it } != null) {
+                if (line.contains(ipAddress!!)) {
+                    return true
+                }
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+        return false
+    }
+
+    private fun isHostOnline(ip: String?, port: Int, timeout: Int): Boolean {
+        try {
+            Socket().use { socket ->
+                val socketAddress: SocketAddress = InetSocketAddress(ip, port)
+                socket.connect(socketAddress, timeout)
+                return true
+            }
+        } catch (e: IOException) {
+            return false
+        }
     }
 
     private suspend fun sendToIp(
@@ -260,7 +288,7 @@ class NetworkManager(
                         currentRetry++
                         Log.d("Network", "connectToServer: Incrementing currentRetry")
                         if (currentRetry < maxRetries) {
-                            delay(1000)
+                            delay(1500)
                         }
                     }
                 }
