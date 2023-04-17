@@ -20,6 +20,7 @@ This Android app allows users to establish a network connection and send message
 - AndroidX libraries
 - Material Components for Android
 - Coroutine for asynchronous tasks
+- Java Sockets for network communication
 
 ### Architectural Pattern
 - Model-View-ViewModel (MVVM)
@@ -32,7 +33,7 @@ The app consists of the following main components:
 - `Constants` object: A singleton object that stores constants such as the connection timeout, port, and socket timeout.
 - `MainViewModel` class: A ViewModel class that extends `ViewModel` and contains LiveData objects to manage and store the application's UI data. It also contains a few variables for user input.
 - `MainActivity` class: An `AppCompatActivity` that handles the UI interactions and works with the `MainViewModel`. It sets up views, listeners, and shared preferences, and manages the network connection using a `NetworkManager` object.
-- `NetworkManager` class: A custom class responsible for managing the network connection, connecting to the server, and sending messages.
+- `NetworkManager` class: A custom class responsible for managing the network connection, connecting to the server, and sending messages using Java Sockets.
 
 ## Getting Started
 
